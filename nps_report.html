@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NPS Report</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #e5e7eb;
+        }
+        .glow { box-shadow: 0 0 10px rgba(0,0,0,0.1), 0 0 20px rgba(0,0,0,0.05); }
+        .score-box {
+            background-color: #fff;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="bg-gray-200 flex flex-col items-center min-h-screen p-4">
+
+    <!-- Main Container -->
+    <div class="bg-white rounded-xl shadow-2xl p-8 max-w-5xl w-full glow">
+        <div class="text-center mb-8">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-800">Bosch Car Service</h1>
+            <h2 class="text-2xl font-semibold text-gray-700 mt-2">NPS Report</h2>
+            <p class="mt-2 text-gray-500">View real-time survey data and download a CSV file.</p>
+        </div>
+
+        <!-- NPS Summary -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            <div class="score-box">
+                <p class="text-lg font-bold text-gray-800">Overall NPS Score</p>
+                <div id="npsScoreDisplay" class="text-5xl font-extrabold mt-2 text-gray-800">--</div>
+            </div>
+            <div class="score-box bg-green-50">
+                <p class="text-lg font-bold text-green-700">Promoters</p>
+                <div id="promotersCount" class="text-4xl font-extrabold mt-2 text-green-700">0</div>
+            </div>
+            <div class="score-box bg-red-50">
+                <p class="text-lg font-bold text-red-700">Detractors</p>
+                <div id="detractorsCount" class="text-4xl font-extrabold mt-2 text-red-700">0</div>
+            </div>
+        </div>
+        
+        <div class="flex justify-end mb-4">
+            <button id="exportCsvBtn" class="px-6 py-3 bg-gray-800 text-white font-semibold rounded-lg shadow-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition duration-300 ease-in-out">
+                Export to CSV
+            </button>
+        </div>
+
+        <!-- Individual Responses Table -->
+        <div class="overflow-x-auto">
+            <table class="min-w-full bg-white rounded-lg shadow-sm">
+                <thead>
+                    <tr class="w-full bg-gray-100 text-left text-gray-600 uppercase text-sm leading-normal">
+                        <th class="py-3 px-6 text-left">User ID</th>
+                        <th class="py-3 px-6 text-left">Score</th>
+                        <th class="py-3 px-6 text-left">Comment</th>
+                        <th class="py-3 px-6 text-left">NPS Type</th>
+                        <th class="py-3 px-6 text-left">Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="reportTableBody" class="text-gray-600 text-sm font-light">
+                    <!-- Data will be populated here by JavaScript -->
+                    <tr><td colspan="5" class="py-4 text-center text-gray-500">Loading data...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Message Box -->
+    <div id="messageBox" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg p-6 shadow-xl max-w-sm w-full text-center">
+            <p id="messageText" class="text-lg font-semibold text-gray-800"></p>
+            <button onclick="document.getElementById('messageBox').classList.add('hidden')" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none">
+                Close
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Firebase global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Initialize Firebase
+        let app, db, auth;
+        let userId = null;
+        let allResponses = [];
+
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+            db = getFirestore(app);
+
+            const authPromise = initialAuthToken
+                ? signInWithCustomToken(auth, initialAuthToken)
+                : signInAnonymously(auth);
+
+            authPromise
+                .then(userCredential => {
+                    userId = userCredential.user.uid;
+                    console.log("Firebase initialized and user authenticated. User ID:", userId);
+                    setupRealtimeListener();
+                })
+                .catch(error => {
+                    console.error("Firebase Authentication Error:", error);
+                    showMessage("Authentication failed. Please try again.");
+                });
+        } catch (error) {
+            console.error("Firebase Initialization Error:", error);
+            showMessage("Failed to initialize the application. Please check the configuration.");
+        }
+
+        const tableBody = document.getElementById('reportTableBody');
+        const npsScoreDisplay = document.getElementById('npsScoreDisplay');
+        const promotersCount = document.getElementById('promotersCount');
+        const detractorsCount = document.getElementById('detractorsCount');
+        const exportCsvBtn = document.getElementById('exportCsvBtn');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        function showMessage(message) {
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden');
+        }
+
+        function setupRealtimeListener() {
+            const collectionPath = `/artifacts/${appId}/public/data/nps_surveys`;
+            const q = query(collection(db, collectionPath));
+
+            onSnapshot(q, (snapshot) => {
+                allResponses = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    allResponses.push(data);
+                });
+                
+                // Sort responses by timestamp in descending order
+                allResponses.sort((a, b) => {
+                    // Handle serverTimestamp which can be null initially
+                    const aTime = a.timestamp ? a.timestamp.toMillis() : 0;
+                    const bTime = b.timestamp ? b.timestamp.toMillis() : 0;
+                    return bTime - aTime;
+                });
+
+                updateReport();
+            }, (error) => {
+                console.error("Error listening to collection: ", error);
+                showMessage("Failed to load real-time data.");
+            });
+        }
+        
+        function updateReport() {
+            tableBody.innerHTML = '';
+            if (allResponses.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-gray-500">No responses found.</td></tr>';
+                npsScoreDisplay.textContent = '--';
+                promotersCount.textContent = '0';
+                detractorsCount.textContent = '0';
+                return;
+            }
+
+            let promoters = 0;
+            let detractors = 0;
+
+            allResponses.forEach(response => {
+                const row = document.createElement('tr');
+                row.className = 'border-b border-gray-200 hover:bg-gray-100';
+
+                const timestamp = response.timestamp ? new Date(response.timestamp.toMillis()).toLocaleString() : 'N/A';
+                const npsType = response.npsType || 'N/A';
+                const comment = response.comment || '-';
+                const displayUserId = response.userId ? response.userId.slice(0, 8) + '...' : 'Anonymous';
+
+                row.innerHTML = `
+                    <td class="py-3 px-6">${displayUserId}</td>
+                    <td class="py-3 px-6">${response.overallScore}</td>
+                    <td class="py-3 px-6 max-w-sm overflow-hidden whitespace-nowrap overflow-ellipsis" title="${comment}">${comment}</td>
+                    <td class="py-3 px-6">
+                        <span class="px-3 py-1 font-semibold rounded-full text-xs
+                            ${npsType === 'Promoter' ? 'bg-green-200 text-green-700' :
+                             npsType === 'Passive' ? 'bg-yellow-200 text-yellow-700' :
+                             'bg-red-200 text-red-700'}">
+                            ${npsType}
+                        </span>
+                    </td>
+                    <td class="py-3 px-6">${timestamp}</td>
+                `;
+                tableBody.appendChild(row);
+
+                if (response.overallScore >= 9) {
+                    promoters++;
+                } else if (response.overallScore <= 6) {
+                    detractors++;
+                }
+            });
+
+            // Calculate and display NPS score
+            const totalResponses = allResponses.length;
+            const npsScore = Math.round(((promoters - detractors) / totalResponses) * 100);
+            npsScoreDisplay.textContent = npsScore;
+            
+            // Update counts
+            promotersCount.textContent = promoters;
+            detractorsCount.textContent = detractors;
+
+            // Update NPS score color
+            let scoreColor = 'text-gray-800';
+            if (npsScore >= 50) {
+                scoreColor = 'text-green-600';
+            } else if (npsScore >= 0) {
+                scoreColor = 'text-yellow-600';
+            } else {
+                scoreColor = 'text-red-600';
+            }
+            npsScoreDisplay.className = `text-5xl font-extrabold mt-2 ${scoreColor}`;
+        }
+
+        exportCsvBtn.addEventListener('click', () => {
+            if (allResponses.length === 0) {
+                showMessage("No data to export.");
+                return;
+            }
+
+            const header = ["userId", "overallScore", "npsType", "comment", "timestamp", "appointment_score", "serviceQuality_score", "workshopFacility_score", "serviceAdvisor_score"];
+            
+            const rows = allResponses.map(response => {
+                const answers = response.answers || {};
+                const timestamp = response.timestamp ? new Date(response.timestamp.toMillis()).toISOString() : '';
+                return [
+                    `"${response.userId}"`,
+                    response.overallScore,
+                    `"${response.npsType}"`,
+                    `"${(response.comment || '').replace(/"/g, '""')}"`, // Handle quotes
+                    `"${timestamp}"`,
+                    answers.appointment,
+                    answers.serviceQuality,
+                    answers.workshopFacility,
+                    answers.serviceAdvisor
+                ].join(',');
+            });
+            
+            const csv = [header.join(','), ...rows].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", "nps_report.csv");
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    </script>
+</body>
+</html>
