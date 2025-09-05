@@ -33,6 +33,12 @@
             color: white;
             border-color: #2563eb;
         }
+        .bg-red-custom { background-color: #fee2e2; }
+        .text-red-800 { color: #991b1b; }
+        .bg-yellow-custom { background-color: #fef3c7; }
+        .text-yellow-800 { color: #92400e; }
+        .bg-green-custom { background-color: #d1fae5; }
+        .text-green-800 { color: #065f46; }
     </style>
 </head>
 <body class="bg-gray-200 flex items-center justify-center min-h-screen p-4">
@@ -110,6 +116,29 @@
                 </div>
             </div>
         </div>
+
+        <!-- Feedback and NPS Score Section -->
+        <div id="feedbackSection" class="mt-8">
+            <h3 class="text-xl font-semibold text-gray-700 border-t pt-6">Recent Responses and Analytics</h3>
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
+                <div class="bg-gray-100 p-4 rounded-lg text-center">
+                    <p class="text-lg font-bold text-gray-800">Overall NPS Score:</p>
+                    <div id="npsScoreDisplay" class="text-5xl font-extrabold mt-2 text-gray-800">--</div>
+                </div>
+                <div class="bg-gray-100 p-4 rounded-lg">
+                    <p class="text-lg font-bold text-gray-800 text-center mb-2">Category Averages (0-10 Scale)</p>
+                    <div id="categoryScoresContainer" class="space-y-2">
+                        <p class="text-gray-500 text-sm text-center">Loading averages...</p>
+                    </div>
+                </div>
+            </div>
+
+            <h4 class="text-lg font-semibold text-gray-700 mt-6">Individual Responses</h4>
+            <div id="responsesContainer" class="mt-4 space-y-4">
+                <p class="text-gray-500 text-center">Loading recent feedback...</p>
+            </div>
+        </div>
     </div>
 
     <!-- Message Box -->
@@ -125,7 +154,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         // Firebase global variables provided by the environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -149,6 +178,9 @@
                 }
                 isAuthReady = true;
                 console.log("Firebase Auth State Changed. User ID:", userId);
+                if (isAuthReady && userId) {
+                    setupRealtimeListener();
+                }
             });
 
             async function initializeAuth() {
@@ -176,8 +208,12 @@
         const questionsScreen = document.getElementById('questionsScreen');
         const submitBtn = document.getElementById('submitBtn');
         const commentInput = document.getElementById('comment');
+        const responsesContainer = document.getElementById('responsesContainer');
         const messageBox = document.getElementById('messageBox');
         const messageText = document.getElementById('messageText');
+        const npsScoreDisplay = document.getElementById('npsScoreDisplay');
+        const categoryScoresContainer = document.getElementById('categoryScoresContainer');
+        const commentSection = document.getElementById('commentSection');
 
         let allAnswers = {};
         const categories = ['appointment', 'serviceQuality', 'workshopFacility', 'serviceAdvisor', 'overallNPS'];
@@ -285,6 +321,141 @@
                 showMessage("Error submitting survey. Please try again.");
             }
         });
+
+        // Real-time listener for responses
+        function setupRealtimeListener() {
+            const collectionPath = `/artifacts/${appId}/public/data/nps_surveys`;
+            const q = query(collection(db, collectionPath));
+
+            onSnapshot(q, (snapshot) => {
+                const responses = [];
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    responses.push(data);
+                });
+                responses.sort((a, b) => b.timestamp - a.timestamp);
+
+                const totalResponses = responses.length;
+                console.log("New data snapshot received. Total responses:", totalResponses);
+
+                if (totalResponses > 0) {
+                    let promoters = 0;
+                    let detractors = 0;
+                    
+                    responses.forEach(response => {
+                        if (response.overallScore >= 9) {
+                            promoters++;
+                        } else if (response.overallScore <= 6) {
+                            detractors++;
+                        }
+                    });
+
+                    // Calculate NPS score
+                    const npsScore = Math.round(((promoters - detractors) / totalResponses) * 100);
+                    console.log("Promoters:", promoters, "Detractors:", detractors, "Calculated NPS Score:", npsScore);
+
+                    npsScoreDisplay.textContent = npsScore;
+                    let scoreColor = 'text-gray-800';
+                    if (npsScore >= 50) {
+                        scoreColor = 'text-green-600';
+                    } else if (npsScore >= 0) {
+                        scoreColor = 'text-yellow-600';
+                    } else {
+                        scoreColor = 'text-red-600';
+                    }
+                    npsScoreDisplay.className = `text-5xl font-extrabold mt-2 ${scoreColor}`;
+
+                    // Category Score Calculation (average of 0-10 scores)
+                    const categoryTotals = {
+                        appointment: 0,
+                        serviceQuality: 0,
+                        workshopFacility: 0,
+                        serviceAdvisor: 0
+                    };
+                    let validResponsesCount = 0;
+
+                    responses.forEach(response => {
+                        if (response.answers) {
+                            validResponsesCount++;
+                            categoryTotals.appointment += response.answers.appointment;
+                            categoryTotals.serviceQuality += response.answers.serviceQuality;
+                            categoryTotals.workshopFacility += response.answers.workshopFacility;
+                            categoryTotals.serviceAdvisor += response.answers.serviceAdvisor;
+                        }
+                    });
+
+                    if (validResponsesCount > 0) {
+                        const scoreCategories = Object.keys(categoryTotals);
+                        categoryScoresContainer.innerHTML = '';
+                        scoreCategories.forEach(category => {
+                            const average = (categoryTotals[category] / validResponsesCount).toFixed(1);
+                            const categoryName = category.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+                            const scoreItem = document.createElement('div');
+                            scoreItem.className = 'flex justify-between items-center';
+                            scoreItem.innerHTML = `
+                                <span class="text-sm font-medium text-gray-700">${categoryName}:</span>
+                                <span class="text-md font-bold text-blue-600">${average} / 10</span>
+                            `;
+                            categoryScoresContainer.appendChild(scoreItem);
+                        });
+                    } else {
+                        categoryScoresContainer.innerHTML = '<p class="text-gray-500 text-sm text-center">No category scores yet.</p>';
+                    }
+
+                } else {
+                    npsScoreDisplay.textContent = '--';
+                    npsScoreDisplay.className = `text-5xl font-extrabold mt-2 text-gray-800`;
+                    categoryScoresContainer.innerHTML = '<p class="text-gray-500 text-sm text-center">No category scores yet.</p>';
+                }
+
+                // Display recent responses
+                responsesContainer.innerHTML = '';
+                if (responses.length === 0) {
+                    responsesContainer.innerHTML = '<p class="text-gray-500 text-center">No responses yet.</p>';
+                } else {
+                    responses.forEach(response => {
+                        const responseDiv = document.createElement('div');
+                        let scoreColor = 'bg-red-custom text-red-800';
+                        if (response.npsType === 'Passive') {
+                            scoreColor = 'bg-yellow-custom text-yellow-800';
+                        } else if (response.npsType === 'Promoter') {
+                            scoreColor = 'bg-green-custom text-green-800';
+                        }
+                        
+                        const displayUserId = response.userId ? response.userId : 'anonymous';
+
+                        const commentHtml = response.comment ? `<p class="text-gray-600 italic mt-2">"${response.comment}"</p>` : '';
+                        
+                        const answersHtml = response.answers ? `
+                            <p class="text-sm font-semibold mt-2">Detailed Feedback (0-10 Scale):</p>
+                            <ul class="list-disc list-inside text-gray-600 text-sm">
+                                <li>Appointment: ${response.answers.appointment}</li>
+                                <li>Service Quality: ${response.answers.serviceQuality}</li>
+                                <li>Workshop Facility: ${response.answers.workshopFacility}</li>
+                                <li>Service Advisor: ${response.answers.serviceAdvisor}</li>
+                            </ul>
+                        ` : '';
+
+                        responseDiv.innerHTML = `
+                            <div class="p-4 rounded-lg shadow-sm border border-gray-200">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-sm font-semibold text-gray-700">User ID: ${displayUserId}</span>
+                                    <span class="px-3 py-1 text-sm font-semibold rounded-full ${scoreColor}">
+                                        NPS Score: ${response.overallScore}
+                                    </span>
+                                </div>
+                                ${commentHtml}
+                                ${answersHtml}
+                            </div>
+                        `;
+                        responsesContainer.appendChild(responseDiv);
+                    });
+                }
+            }, (error) => {
+                console.error("Error listening to collection: ", error);
+                showMessage("Failed to load real-time data.");
+            });
+        }
     </script>
 </body>
 </html>
