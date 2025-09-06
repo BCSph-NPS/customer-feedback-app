@@ -40,12 +40,20 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="container mx-auto">
         <div id="surveyContent">
+            
             <h1 class="text-4xl font-bold text-gray-800 mb-2">Bosch Car Service</h1>
             <h2 class="text-2xl font-semibold text-gray-700 mb-6">NPS Survey</h2>
+
+            <!-- Logo Section - NOW PLACED BELOW THE HEADINGS -->
+            <div class="mb-4">
+                <img src="https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_afb63e.png" alt="Bosch Car Service Logo" class="mx-auto h-12 w-auto mb-2">
+            </div>
+
             <div id="welcomeScreen" class="text-center space-y-4">
                 <p id="loadingMessage" class="text-lg font-medium text-gray-700">Loading...</p>
+                <p id="authError" class="text-lg font-medium text-red-500 hidden"></p>
                 <p id="welcomeText" class="text-lg font-medium text-gray-700 hidden">
                     Thank you for choosing Bosch Car Service. We'd love to hear about your recent visit.
                 </p>
@@ -116,6 +124,7 @@
         const messageText = document.getElementById('messageText');
         const commentSection = document.getElementById('commentSection');
         const loadingMessage = document.getElementById('loadingMessage');
+        const authError = document.getElementById('authError');
         const welcomeText = document.getElementById('welcomeText');
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -140,13 +149,14 @@
             db = getFirestore(app);
         
             onAuthStateChanged(auth, async (user) => {
+                isAuthReady = true;
                 if (user) {
                     userId = user.uid;
                 } else {
-                    userId = null;
+                    userId = crypto.randomUUID(); // Fallback to a random ID if not authenticated
                 }
-                isAuthReady = true;
                 loadingMessage.classList.add('hidden');
+                authError.classList.add('hidden');
                 welcomeText.classList.remove('hidden');
                 startSurveyBtn.classList.remove('hidden');
                 console.log("Firebase Auth State Changed. User ID:", userId);
@@ -163,7 +173,18 @@
                     }
                 } catch (error) {
                     console.error("Firebase Auth Error:", error);
-                    showMessage("Authentication failed. Please try again.");
+                    // Handle failure gracefully without blocking the UI
+                    setTimeout(() => {
+                        if (!isAuthReady) {
+                            loadingMessage.classList.add('hidden');
+                            welcomeText.classList.remove('hidden');
+                            startSurveyBtn.classList.remove('hidden');
+                            authError.textContent = "Could not connect to database. Your feedback might not be saved.";
+                            authError.classList.remove('hidden');
+                            userId = crypto.randomUUID(); // Assign a temporary ID
+                            console.log("Authentication timed out. Assigned a temporary user ID.");
+                        }
+                    }, 5000); // 5-second timeout
                 }
             }
             initializeAuth();
@@ -226,7 +247,7 @@
             const npsType = (allAnswers.overallNPS <= 6) ? 'Detractor' : (allAnswers.overallNPS <= 8) ? 'Passive' : 'Promoter';
             
             if (!isAuthReady || !userId) {
-                showMessage("Authentication not ready. Please wait and try again.");
+                showMessage("Connection issue. Please check your internet and try again. Your feedback might not be saved.");
                 return;
             }
         
