@@ -45,10 +45,11 @@
             <h1 class="text-4xl font-bold text-gray-800 mb-2">Bosch Car Service</h1>
             <h2 class="text-2xl font-semibold text-gray-700 mb-6">NPS Survey</h2>
             <div id="welcomeScreen" class="text-center space-y-4">
-                <p class="text-lg font-medium text-gray-700">
+                <p id="loadingMessage" class="text-lg font-medium text-gray-700">Loading...</p>
+                <p id="welcomeText" class="text-lg font-medium text-gray-700 hidden">
                     Thank you for choosing Bosch Car Service. We'd love to hear about your recent visit.
                 </p>
-                <button id="startSurveyBtn" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out">
+                <button id="startSurveyBtn" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out hidden">
                     Start Survey
                 </button>
             </div>
@@ -113,6 +114,8 @@
         const messageBox = document.getElementById('messageBox');
         const messageText = document.getElementById('messageText');
         const commentSection = document.getElementById('commentSection');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const welcomeText = document.getElementById('welcomeText');
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
@@ -142,6 +145,9 @@
                     userId = null;
                 }
                 isAuthReady = true;
+                loadingMessage.classList.add('hidden');
+                welcomeText.classList.remove('hidden');
+                startSurveyBtn.classList.remove('hidden');
                 console.log("Firebase Auth State Changed. User ID:", userId);
             });
         
