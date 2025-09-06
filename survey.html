@@ -12,7 +12,7 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
-            background-image: url('https://placehold.co/1920x1080/000000/ffffff?text=Car+Workshop+Silhouette');
+            background-image: url('https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_a54d6f.png');
             background-size: cover;
             background-repeat: no-repeat;
             background-position: center;
@@ -36,7 +36,7 @@
         .container {
             position: relative;
             z-index: 2;
-            background-color: rgba(255, 255, 255, 0.9); /* Now semi-transparent */
+            background-color: rgba(255, 255, 255, 0.9);
             padding: 2.5rem;
             border-radius: 1rem;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
@@ -50,7 +50,7 @@
     <div class="container mx-auto">
         <div id="surveyContent">
             
-            <!-- Logo Section - NOW PLACED AT THE VERY TOP -->
+            <!-- Logo Section -->
             <div class="mb-4">
                 <img src="https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_afb63e.png" alt="Bosch Car Service Logo" class="mx-auto h-12 w-auto mb-2">
             </div>
@@ -155,7 +155,20 @@
             auth = getAuth(app);
             db = getFirestore(app);
         
+            let authTimeout = setTimeout(() => {
+                if (!isAuthReady) {
+                    loadingMessage.classList.add('hidden');
+                    authError.textContent = "Could not connect to the database. Your feedback might not be saved.";
+                    authError.classList.remove('hidden');
+                    welcomeText.classList.remove('hidden');
+                    startSurveyBtn.classList.remove('hidden');
+                    userId = crypto.randomUUID(); // Fallback ID
+                    console.log("Auth timed out. Proceeding with temporary user ID.");
+                }
+            }, 5000);
+        
             onAuthStateChanged(auth, async (user) => {
+                clearTimeout(authTimeout); // Clear the timeout if auth succeeds
                 isAuthReady = true;
                 if (user) {
                     userId = user.uid;
@@ -180,18 +193,6 @@
                     }
                 } catch (error) {
                     console.error("Firebase Auth Error:", error);
-                    // Handle failure gracefully without blocking the UI
-                    setTimeout(() => {
-                        if (!isAuthReady) {
-                            loadingMessage.classList.add('hidden');
-                            welcomeText.classList.remove('hidden');
-                            startSurveyBtn.classList.remove('hidden');
-                            authError.textContent = "Could not connect to database. Your feedback might not be saved.";
-                            authError.classList.remove('hidden');
-                            userId = crypto.randomUUID(); // Assign a temporary ID
-                            console.log("Authentication timed out. Assigned a temporary user ID.");
-                        }
-                    }, 5000); // 5-second timeout
                 }
             }
             initializeAuth();
