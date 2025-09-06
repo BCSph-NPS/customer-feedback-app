@@ -104,15 +104,37 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        const welcomeScreen = document.getElementById('welcomeScreen');
+        const questionsScreen = document.getElementById('questionsScreen');
+        const startSurveyBtn = document.getElementById('startSurveyBtn');
+        const submitBtn = document.getElementById('submitBtn');
+        const commentInput = document.getElementById('comment');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const commentSection = document.getElementById('commentSection');
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const collectionPath = `/artifacts/${appId}/public/data/nps_surveys`;
+        
         let app, db, auth, userId;
         let isAuthReady = false;
+        let allAnswers = {};
+        const categories = ['appointment', 'serviceQuality', 'workshopFacility', 'serviceAdvisor', 'overallNPS'];
+        const questionEmojis = ['q1-emoji', 'q2-emoji', 'q3-emoji', 'q4-emoji', 'q5-emoji'];
+        
+        function showMessage(message) {
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden');
+        }
+        
         try {
             app = initializeApp(firebaseConfig);
             auth = getAuth(app);
             db = getFirestore(app);
+        
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
                     userId = user.uid;
@@ -122,6 +144,7 @@
                 isAuthReady = true;
                 console.log("Firebase Auth State Changed. User ID:", userId);
             });
+        
             async function initializeAuth() {
                 try {
                     if (initialAuthToken) {
@@ -141,26 +164,12 @@
             console.error("Firebase Initialization Error:", error);
             showMessage("Failed to initialize the application. Please check the configuration.");
         }
-        const welcomeScreen = document.getElementById('welcomeScreen');
-        const questionsScreen = document.getElementById('questionsScreen');
-        const startSurveyBtn = document.getElementById('startSurveyBtn');
-        const submitBtn = document.getElementById('submitBtn');
-        const commentInput = document.getElementById('comment');
-        const messageBox = document.getElementById('messageBox');
-        const messageText = document.getElementById('messageText');
-        const commentSection = document.getElementById('commentSection');
-        const collectionPath = `/artifacts/${appId}/public/data/nps_surveys`;
-        let allAnswers = {};
-        const categories = ['appointment', 'serviceQuality', 'workshopFacility', 'serviceAdvisor', 'overallNPS'];
-        const questionEmojis = ['q1-emoji', 'q2-emoji', 'q3-emoji', 'q4-emoji', 'q5-emoji'];
-        function showMessage(message) {
-            messageText.textContent = message;
-            messageBox.classList.remove('hidden');
-        }
+        
         startSurveyBtn.addEventListener('click', () => {
             welcomeScreen.classList.add('hidden');
             questionsScreen.classList.remove('hidden');
         });
+        
         function checkAllQuestionsAnswered() {
             const answeredCount = Object.keys(allAnswers).length;
             const requiredCount = categories.length;
@@ -172,6 +181,7 @@
                 commentSection.classList.add('hidden');
             }
         }
+        
         categories.forEach((category, index) => {
             const container = document.getElementById(`q${index + 1}-score-buttons`);
             for (let i = 0; i <= 10; i++) {
@@ -199,6 +209,7 @@
                 container.appendChild(button);
             }
         });
+        
         submitBtn.addEventListener('click', async () => {
             if (Object.keys(allAnswers).length !== categories.length) {
                 showMessage("Please answer all questions before submitting.");
@@ -206,10 +217,12 @@
             }
             const comment = commentInput.value.trim();
             const npsType = (allAnswers.overallNPS <= 6) ? 'Detractor' : (allAnswers.overallNPS <= 8) ? 'Passive' : 'Promoter';
+            
             if (!isAuthReady || !userId) {
                 showMessage("Authentication not ready. Please wait and try again.");
                 return;
             }
+        
             try {
                 await addDoc(collection(db, collectionPath), {
                     overallScore: allAnswers.overallNPS,
