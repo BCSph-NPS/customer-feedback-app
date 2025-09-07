@@ -121,10 +121,15 @@
         import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
-        // PASTE YOUR FIREBASE CONFIGURATION OBJECT HERE
         const firebaseConfig = {
-            // Your configuration details go here
-        };
+    apiKey: "AIzaSyAKAfQjbZFLM74ShQtdLs9758wsPBJ1COM",
+    authDomain: "bosch-nps-survey.firebaseapp.com",
+    projectId: "bosch-nps-survey",
+    storageBucket: "bosch-nps-survey.firebasestorage.app",
+    messagingSenderId: "715010237087",
+    appId: "1:715010237087:web:d43035c0f16f979dc178aa",
+    measurementId: "G-Q43827Z9G3"
+  };
         
         const welcomeScreen = document.getElementById('welcomeScreen');
         const questionsScreen = document.getElementById('questionsScreen');
@@ -152,7 +157,7 @@
         async function initializeFirebase() {
             try {
                 // Check if the config has been updated.
-                if (!firebaseConfig.apiKey) {
+                if (!Object.keys(firebaseConfig).length) {
                     loadingMessage.textContent = "Please update the firebaseConfig object with your project credentials.";
                     return;
                 }
