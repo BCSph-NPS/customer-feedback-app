@@ -12,7 +12,8 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
-            background-image: url('https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_a54d6f.png');
+            /* Updated background image */
+            background-image: url('https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_a5bd53.png');
             background-size: cover;
             background-repeat: no-repeat;
             background-position: center;
@@ -50,7 +51,7 @@
     <div class="container mx-auto">
         <div id="surveyContent">
             
-            <!-- Logo Section -->
+            <!-- Logo Section - Updated logo -->
             <div class="mb-4">
                 <img src="https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_afb63e.png" alt="Bosch Car Service Logo" class="mx-auto h-12 w-auto mb-2">
             </div>
@@ -59,12 +60,12 @@
             <h2 class="text-2xl font-semibold text-gray-700 mb-6">NPS Survey</h2>
 
             <div id="welcomeScreen" class="text-center space-y-4">
-                <p id="loadingMessage" class="text-lg font-medium text-gray-700">Loading...</p>
+                <p id="loadingMessage" class="text-lg font-medium text-gray-700 hidden">Loading...</p>
                 <p id="authError" class="text-lg font-medium text-red-500 hidden"></p>
-                <p id="welcomeText" class="text-lg font-medium text-gray-700 hidden">
+                <p id="welcomeText" class="text-lg font-medium text-gray-700">
                     Thank you for choosing Bosch Car Service. We'd love to hear about your recent visit.
                 </p>
-                <button id="startSurveyBtn" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out hidden">
+                <button id="startSurveyBtn" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out">
                     Start Survey
                 </button>
             </div>
@@ -119,7 +120,7 @@
     </div>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         
         const welcomeScreen = document.getElementById('welcomeScreen');
@@ -130,17 +131,15 @@
         const messageBox = document.getElementById('messageBox');
         const messageText = document.getElementById('messageText');
         const commentSection = document.getElementById('commentSection');
-        const loadingMessage = document.getElementById('loadingMessage');
         const authError = document.getElementById('authError');
-        const welcomeText = document.getElementById('welcomeText');
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         const collectionPath = `/artifacts/${appId}/public/data/nps_surveys`;
         
-        let app, db, auth, userId;
-        let isAuthReady = false;
+        let app, db, auth;
+        let userId = crypto.randomUUID();
         let allAnswers = {};
         const categories = ['appointment', 'serviceQuality', 'workshopFacility', 'serviceAdvisor', 'overallNPS'];
         const questionEmojis = ['q1-emoji', 'q2-emoji', 'q3-emoji', 'q4-emoji', 'q5-emoji'];
@@ -150,56 +149,29 @@
             messageBox.classList.remove('hidden');
         }
         
-        try {
-            app = initializeApp(firebaseConfig);
-            auth = getAuth(app);
-            db = getFirestore(app);
+        // Initialize Firebase after the page has loaded to avoid blocking rendering
+        setTimeout(async () => {
+            try {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
         
-            let authTimeout = setTimeout(() => {
-                if (!isAuthReady) {
-                    loadingMessage.classList.add('hidden');
-                    authError.textContent = "Could not connect to the database. Your feedback might not be saved.";
-                    authError.classList.remove('hidden');
-                    welcomeText.classList.remove('hidden');
-                    startSurveyBtn.classList.remove('hidden');
-                    userId = crypto.randomUUID(); // Fallback ID
-                    console.log("Auth timed out. Proceeding with temporary user ID.");
-                }
-            }, 5000);
-        
-            onAuthStateChanged(auth, async (user) => {
-                clearTimeout(authTimeout); // Clear the timeout if auth succeeds
-                isAuthReady = true;
-                if (user) {
-                    userId = user.uid;
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                    userId = auth.currentUser.uid;
+                    console.log("Signed in with custom token. User ID:", userId);
                 } else {
-                    userId = crypto.randomUUID(); // Fallback to a random ID if not authenticated
+                    await signInAnonymously(auth);
+                    userId = auth.currentUser.uid;
+                    console.log("Signed in anonymously. User ID:", userId);
                 }
-                loadingMessage.classList.add('hidden');
                 authError.classList.add('hidden');
-                welcomeText.classList.remove('hidden');
-                startSurveyBtn.classList.remove('hidden');
-                console.log("Firebase Auth State Changed. User ID:", userId);
-            });
-        
-            async function initializeAuth() {
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Signed in with custom token.");
-                    } else {
-                        await signInAnonymously(auth);
-                        console.log("Signed in anonymously.");
-                    }
-                } catch (error) {
-                    console.error("Firebase Auth Error:", error);
-                }
+            } catch (error) {
+                console.error("Firebase Initialization/Auth Error:", error);
+                authError.textContent = "Could not connect to the database. Your feedback might not be saved.";
+                authError.classList.remove('hidden');
             }
-            initializeAuth();
-        } catch (error) {
-            console.error("Firebase Initialization Error:", error);
-            showMessage("Failed to initialize the application. Please check the configuration.");
-        }
+        }, 100);
         
         startSurveyBtn.addEventListener('click', () => {
             welcomeScreen.classList.add('hidden');
@@ -254,8 +226,9 @@
             const comment = commentInput.value.trim();
             const npsType = (allAnswers.overallNPS <= 6) ? 'Detractor' : (allAnswers.overallNPS <= 8) ? 'Passive' : 'Promoter';
             
-            if (!isAuthReady || !userId) {
-                showMessage("Connection issue. Please check your internet and try again. Your feedback might not be saved.");
+            if (!db) {
+                showMessage("Connection issue. Your feedback might not be saved. Please try again later.");
+                console.error("Database not initialized.");
                 return;
             }
         
