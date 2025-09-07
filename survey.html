@@ -12,7 +12,6 @@
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
-            /* Updated background image */
             background-image: url('https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_a5bd53.png');
             background-size: cover;
             background-repeat: no-repeat;
@@ -51,7 +50,7 @@
     <div class="container mx-auto">
         <div id="surveyContent">
             
-            <!-- Logo Section - Updated logo -->
+            <!-- Logo Section -->
             <div class="mb-4">
                 <img src="https://storage.googleapis.com/g.co/immersive-canvas/user-uploaded-content/image_afb63e.png" alt="Bosch Car Service Logo" class="mx-auto h-12 w-auto mb-2">
             </div>
@@ -60,12 +59,11 @@
             <h2 class="text-2xl font-semibold text-gray-700 mb-6">NPS Survey</h2>
 
             <div id="welcomeScreen" class="text-center space-y-4">
-                <p id="loadingMessage" class="text-lg font-medium text-gray-700 hidden">Loading...</p>
-                <p id="authError" class="text-lg font-medium text-red-500 hidden"></p>
-                <p id="welcomeText" class="text-lg font-medium text-gray-700">
+                <p id="loadingMessage" class="text-lg font-medium text-gray-700">Loading...</p>
+                <p id="welcomeText" class="text-lg font-medium text-gray-700 hidden">
                     Thank you for choosing Bosch Car Service. We'd love to hear about your recent visit.
                 </p>
-                <button id="startSurveyBtn" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out">
+                <button id="startSurveyBtn" class="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-300 ease-in-out hidden">
                     Start Survey
                 </button>
             </div>
@@ -120,8 +118,19 @@
     </div>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // IMPORTANT: Replace the placeholder values below with your Firebase project's configuration.
+        // You can find these values in your Firebase project console under Project Settings > Your apps.
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
         
         const welcomeScreen = document.getElementById('welcomeScreen');
         const questionsScreen = document.getElementById('questionsScreen');
@@ -131,15 +140,12 @@
         const messageBox = document.getElementById('messageBox');
         const messageText = document.getElementById('messageText');
         const commentSection = document.getElementById('commentSection');
-        const authError = document.getElementById('authError');
+        const loadingMessage = document.getElementById('loadingMessage');
+        const welcomeText = document.getElementById('welcomeText');
+
+        const collectionPath = `nps_surveys`;
         
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const collectionPath = `/artifacts/${appId}/public/data/nps_surveys`;
-        
-        let app, db, auth;
-        let userId = crypto.randomUUID();
+        let db, auth, userId;
         let allAnswers = {};
         const categories = ['appointment', 'serviceQuality', 'workshopFacility', 'serviceAdvisor', 'overallNPS'];
         const questionEmojis = ['q1-emoji', 'q2-emoji', 'q3-emoji', 'q4-emoji', 'q5-emoji'];
@@ -149,29 +155,32 @@
             messageBox.classList.remove('hidden');
         }
         
-        // Initialize Firebase after the page has loaded to avoid blocking rendering
-        setTimeout(async () => {
+        async function initializeFirebase() {
             try {
-                app = initializeApp(firebaseConfig);
+                // Check if the config has been updated.
+                if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+                    throw new Error("Firebase configuration not updated. Please add your credentials.");
+                }
+                const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
         
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                    userId = auth.currentUser.uid;
-                    console.log("Signed in with custom token. User ID:", userId);
-                } else {
-                    await signInAnonymously(auth);
-                    userId = auth.currentUser.uid;
-                    console.log("Signed in anonymously. User ID:", userId);
-                }
-                authError.classList.add('hidden');
+                const userCredential = await signInAnonymously(auth);
+                userId = userCredential.user.uid;
+                console.log("Signed in anonymously. User ID:", userId);
+        
+                loadingMessage.classList.add('hidden');
+                welcomeText.classList.remove('hidden');
+                startSurveyBtn.classList.remove('hidden');
+        
             } catch (error) {
                 console.error("Firebase Initialization/Auth Error:", error);
-                authError.textContent = "Could not connect to the database. Your feedback might not be saved.";
-                authError.classList.remove('hidden');
+                loadingMessage.textContent = "Error: Could not connect to the database. " + error.message;
             }
-        }, 100);
+        }
+        
+        // We will call the initialization on page load
+        initializeFirebase();
         
         startSurveyBtn.addEventListener('click', () => {
             welcomeScreen.classList.add('hidden');
@@ -233,6 +242,7 @@
             }
         
             try {
+                // We use a general `nps_surveys` collection since it's a public survey
                 await addDoc(collection(db, collectionPath), {
                     overallScore: allAnswers.overallNPS,
                     comment: comment,
@@ -246,6 +256,9 @@
                 commentInput.value = '';
                 questionsScreen.classList.add('hidden');
                 welcomeScreen.classList.remove('hidden');
+                loadingMessage.classList.add('hidden');
+                welcomeText.classList.remove('hidden');
+                startSurveyBtn.classList.remove('hidden');
                 document.querySelectorAll('button').forEach(btn => btn.classList.remove('bg-blue-600', 'text-white'));
                 questionEmojis.forEach(id => {
                     document.getElementById(id).textContent = '';
